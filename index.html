@@ -149,7 +149,9 @@ function connect(addrRaw) {
   if (!n) { setStatus(false, 'Isi IP atau alamat wss:// dulu'); return; }
   const addr = n.url;
   if (location.protocol === 'https:' && addr.startsWith('ws://')) {
-    setStatus(false, 'Halaman HTTPS tidak boleh ke ws://. Pakai alamat wss:// (Cloudflare Tunnel) atau buka halaman lewat http://');
+    // Halaman HTTPS tidak boleh membuka ws://, jadi pindah langsung ke halaman kontrol di PC itu (HTTP)
+    setStatus(false, 'Membuka http://' + addr.slice(5) + ' ...');
+    location.href = 'http://' + addr.slice(5) + '/?auto=1';
     return;
   }
   disconnect(true);
@@ -242,6 +244,12 @@ canvas.addEventListener('keyup', e => { const k = mapKey(e.code); if (k) { e.pre
 // ---------- Awal ----------
 try { $('ip').value = localStorage.getItem('lastIp') || ''; } catch (e) {}
 renderSaved();
+
+// Kalau halaman ini disajikan oleh agent di PC (http://IP:8000/?auto=1), langsung sambung ke PC itu sendiri
+if (new URLSearchParams(location.search).get('auto') === '1' && location.protocol === 'http:') {
+  $('ip').value = location.host;
+  connect(location.host);
+}
 </script>
 </body>
 </html>
