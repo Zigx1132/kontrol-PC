@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remote PC Lab - Controller</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:#ddd; font-family:system-ui,sans-serif; }
+  #bar { padding:8px 12px; background:#222; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:14px; }
+  input { background:#111; color:#eee; border:1px solid #444; border-radius:6px; padding:6px 8px; font-size:14px; }
+  #ip { width:190px; }
+  #name { width:130px; }
+  button { background:#2d6cdf; color:#fff; border:0; border-radius:6px; padding:7px 12px; cursor:pointer; font-size:14px; }
+  button.gray { background:#444; }
+  button:hover { filter:brightness(1.15); }
+  #dot { width:10px; height:10px; border-radius:50%; background:#c33; display:inline-block; }
+  #dot.on { background:#3c3; }
+  #saved { padding:6px 12px; background:#1a1a1a; display:flex; flex-wrap:wrap; gap:6px; min-height:38px; align-items:center; }
+  .chip { display:inline-flex; align-items:center; background:#333; border-radius:14px; padding:3px 4px 3px 12px; font-size:13px; cursor:pointer; }
+  .chip:hover { background:#444; }
+  .chip.active { background:#1f5e2e; }
+  .chip small { opacity:.6; margin-left:6px; }
+  .chip .x { margin-left:8px; width:20px; height:20px; border-radius:50%; text-align:center; line-height:20px; background:#555; }
+  .chip .x:hover { background:#a33; }
+  #empty { opacity:.5; font-size:13px; }
+  #sync { margin-left:auto; font-size:12px; opacity:.7; }
+  #stage { padding:6px; }
+  canvas { display:none; max-width:100%; margin:0 auto; outline:none; cursor:crosshair; }
+  #hint { text-align:center; opacity:.5; padding:60px 20px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span id="dot"></span><span id="status">Belum terhubung</span>
+  <input id="name" placeholder="Nama (opsional)">
+  <input id="ip" placeholder="IP PC, misal 192.168.1.25">
+  <button id="btnConnect">Connect</button>
+  <button id="btnSave" class="gray">Simpan</button>
+  <button id="btnDisc" class="gray">Putuskan</button>
+  <button id="btnFull" class="gray">Layar penuh</button>
+  <span id="sync"></span>
+</div>
+<div id="saved"></div>
+<div id="stage">
+  <div id="hint">Masukkan IP PC lab di atas lalu klik <b>Connect</b>, atau pilih PC yang sudah tersimpan.<br>
+  Setelah layar tampil, klik layar sekali agar keyboard aktif.</div>
+  <canvas id="c" tabindex="0"></canvas>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// ====== ISI DENGAN DATA PROJECT SUPABASE KAMU ======
+const SUPABASE_URL = 'https://gjrfggzjenzvegswsjaw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_4heQoBDpzxK-kFrlLK9j6w_FB9j6aUL';
+// ===================================================
+
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = id => document.getElementById(id);
+const canvas = $('c'), ctx = canvas.getContext('2d');
+const DEFAULT_PORT = 8000;
+let ws = null, manualClose = false, activeAddr = null;
+
+// ---------- Penyimpanan daftar PC (Supabase + cache localStorage) ----------
+function readCache() {
+  try { return JSON.parse(localStorage.getItem('pcs') || '[]'); } catch (e) { return []; }
+}
+function writeCache(list) {
+  try { localStorage.setItem('pcs', JSON.stringify(list)); } catch (e) {}
+}
+function setSync(text) { $('sync').textContent = text; }
+
+async function loadPCs() {
+  try {
+    const { data, error } = await sb.from('pcs').select('name,addr').order('created_at');
+    if (error) throw error;
+    writeCache(data);
+    setSync('☁ Supabase');
+    return data;
+  } catch (e) {
+    setSync('⚠ Offline (cache lokal)');
+    return readCache();
+  }
+}
+async function savePC(name, addr) {
+  const list = readCache();
+  const found = list.find(p => p.addr === addr);
+  if (found) found.name = name; else list.push({ name, addr });
+  writeCache(list);
+  const { error } = await sb.from('pcs').upsert({ name, addr }, { onConflict: 'addr' });
+  if (error) setSync('⚠ Gagal simpan ke Supabase');
+}
+async function deletePC(addr) {
+  writeCache(readCache().filter(p => p.addr !== addr));
+  const { error } = await sb.from('pcs').delete().eq('addr', addr);
+  if (error) setSync('⚠ Gagal hapus di Supabase');
+}
+
+function normalize(raw) {
+  let v = raw.trim().replace(/^https?:\/\//, '').replace(/^ws:\/\//, '').replace(/\/.*$/, '');
+  if (!v) return null;
+  if (!/:\d+$/.test(v)) v += ':' + DEFAULT_PORT;
+  return v;
+}
+async function renderSaved() {
+  const box = $('saved');
+  const list = await loadPCs();
+  box.innerHTML = '';
+  if (!list.length) { box.innerHTML = '<span id="empty">Belum ada PC tersimpan. Isi IP lalu klik "Simpan".</span>'; return; }
+  list.forEach(pc => {
+    const el = document.createElement('div');
+    el.className = 'chip' + (pc.addr === activeAddr ? ' active' : '');
+    el.innerHTML = '<span></span><small></small><span class="x" title="Hapus">×</span>';
+    el.children[0].textContent = pc.name;
+    el.children[1].textContent = pc.addr;
+    el.onclick = () => { $('name').value = pc.name; $('ip').value = pc.addr; connect(pc.addr); };
+    el.querySelector('.x').onclick = async ev => {
+      ev.stopPropagation();
+      await deletePC(pc.addr);
+      renderSaved();
+    };
+    box.appendChild(el);
+  });
+}
+
+// ---------- Koneksi ----------
+function setStatus(on, text) {
+  $('dot').className = on ? 'on' : '';
+  $('status').textContent = text;
+}
+function connect(addrRaw) {
+  const addr = normalize(addrRaw);
+  if (!addr) { setStatus(false, 'Isi IP dulu'); return; }
+  disconnect(true);
+  manualClose = false;
+  activeAddr = addr;
+  setStatus(false, 'Menghubungkan ke ' + addr + '...');
+  try { localStorage.setItem('lastIp', addr); } catch (e) {}
+  let sock;
+  try { sock = new WebSocket('ws://' + addr + '/ws'); }
+  catch (e) { setStatus(false, 'Alamat tidak valid'); return; }
+  ws = sock;
+  sock.binaryType = 'blob';
+  sock.onopen = () => { setStatus(true, 'Terhubung ke ' + addr); canvas.style.display = 'block'; $('hint').style.display = 'none'; renderSaved(); };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    setStatus(false, manualClose ? 'Terputus' : 'Gagal/terputus dari ' + addr + ' (cek IP, jaringan, dan agent)');
+    activeAddr = null; renderSaved();
+  };
+  sock.onerror = () => {};
+  sock.onmessage = async e => {
+    if (ws !== sock) return;
+    const bmp = await createImageBitmap(e.data);
+    if (canvas.width !== bmp.width || canvas.height !== bmp.height) { canvas.width = bmp.width; canvas.height = bmp.height; }
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close();
+  };
+}
+function disconnect(silent) {
+  manualClose = true;
+  if (ws) { const s = ws; ws = null; try { s.close(); } catch (e) {} }
+  canvas.style.display = 'none';
+  $('hint').style.display = 'block';
+  activeAddr = null;
+  if (!silent) { setStatus(false, 'Terputus'); renderSaved(); }
+}
+
+$('btnConnect').onclick = () => connect($('ip').value);
+$('ip').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('ip').value); });
+$('btnDisc').onclick = () => disconnect(false);
+$('btnFull').onclick = () => { (canvas.requestFullscreen || canvas.webkitRequestFullscreen).call(canvas); canvas.focus(); };
+$('btnSave').onclick = async () => {
+  const addr = normalize($('ip').value);
+  if (!addr) { setStatus(false, 'Isi IP dulu sebelum menyimpan'); return; }
+  const name = $('name').value.trim() || addr;
+  await savePC(name, addr);
+  renderSaved();
+};
+
+// ---------- Mouse ----------
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+           y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+let lastMove = 0;
+canvas.addEventListener('mousemove', e => {
+  const now = performance.now();
+  if (now - lastMove < 30) return;
+  lastMove = now;
+  send({ t: 'move', ...pos(e) });
+});
+canvas.addEventListener('mousedown', e => { canvas.focus(); e.preventDefault(); send({ t: 'down', b: e.button, ...pos(e) }); });
+canvas.addEventListener('mouseup', e => { e.preventDefault(); send({ t: 'up', b: e.button, ...pos(e) }); });
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => { e.preventDefault(); send({ t: 'scroll', dy: e.deltaY }); }, { passive: false });
+
+// ---------- Keyboard ----------
+const SPECIAL = {
+  Enter:'enter', NumpadEnter:'enter', Backspace:'backspace', Tab:'tab', Escape:'esc', Space:'space',
+  ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+  Delete:'delete', Insert:'insert', Home:'home', End:'end', PageUp:'pageup', PageDown:'pagedown',
+  ShiftLeft:'shiftleft', ShiftRight:'shiftright', ControlLeft:'ctrlleft', ControlRight:'ctrlright',
+  AltLeft:'altleft', AltRight:'altright', CapsLock:'capslock', MetaLeft:'winleft', MetaRight:'winright',
+  Minus:'-', Equal:'=', BracketLeft:'[', BracketRight:']', Backslash:'\\', Semicolon:';',
+  Quote:"'", Comma:',', Period:'.', Slash:'/', Backquote:'`'
+};
+function mapKey(code) {
+  if (SPECIAL[code]) return SPECIAL[code];
+  let m;
+  if ((m = code.match(/^Key([A-Z])$/))) return m[1].toLowerCase();
+  if ((m = code.match(/^Digit(\d)$/))) return m[1];
+  if ((m = code.match(/^Numpad(\d)$/))) return 'num' + m[1];
+  if ((m = code.match(/^F(\d+)$/))) return 'f' + m[1];
+  return null;
+}
+canvas.addEventListener('keydown', e => { const k = mapKey(e.code); if (k) { e.preventDefault(); send({ t: 'kd', k }); } });
+canvas.addEventListener('keyup', e => { const k = mapKey(e.code); if (k) { e.preventDefault(); send({ t: 'ku', k }); } });
+
+// ---------- Awal ----------
+try { $('ip').value = localStorage.getItem('lastIp') || ''; } catch (e) {}
+renderSaved();
+</script>
+</body>
+</html>
