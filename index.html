@@ -28,6 +28,12 @@
   #stage { padding:6px; }
   canvas { display:none; max-width:100%; margin:0 auto; outline:none; cursor:crosshair; }
   #hint { text-align:center; opacity:.5; padding:60px 20px; }
+  #drivePanel { display:none; padding:6px 12px 12px; background:#1a1a1a; }
+  #drivePanel.open { display:block; }
+  #driveHead { display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:13px; }
+  #driveHead a { color:#6ea8ff; text-decoration:none; margin-left:auto; }
+  #driveHead a:hover { text-decoration:underline; }
+  #driveFrame { width:100%; height:420px; border:1px solid #444; border-radius:6px; background:#fff; }
 </style>
 </head>
 <body>
@@ -39,7 +45,15 @@
   <button id="btnSave" class="gray">Simpan</button>
   <button id="btnDisc" class="gray">Putuskan</button>
   <button id="btnFull" class="gray">Layar penuh</button>
+  <button id="btnDrive" class="gray">📁 Drive</button>
   <span id="sync"></span>
+</div>
+<div id="drivePanel">
+  <div id="driveHead">
+    <b>Google Drive</b>
+    <a href="https://drive.google.com/drive/folders/1tgT3mAV54nv49mB0lhoBaguD-lHX88iv?usp=sharing" target="_blank" rel="noopener">Buka di tab baru ↗</a>
+  </div>
+  <iframe id="driveFrame" title="Google Drive" loading="lazy"></iframe>
 </div>
 <div id="saved"></div>
 <div id="stage">
@@ -187,6 +201,14 @@ function disconnect(silent) {
   activeAddr = null;
   if (!silent) { setStatus(false, 'Terputus'); renderSaved(); }
 }
+
+// ---------- Google Drive ----------
+const DRIVE_FOLDER_ID = '1tgT3mAV54nv49mB0lhoBaguD-lHX88iv';
+$('btnDrive').onclick = () => {
+  const panel = $('drivePanel'), frame = $('driveFrame');
+  const open = panel.classList.toggle('open');
+  if (open && !frame.src) frame.src = 'https://drive.google.com/embeddedfolderview?id=' + DRIVE_FOLDER_ID + '#list';
+};
 
 $('btnConnect').onclick = () => connect($('ip').value);
 $('ip').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('ip').value); });
