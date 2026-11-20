@@ -4,79 +4,260 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Remote PC Lab - Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; }
-  body { margin:0; background:#111; color:#ddd; font-family:system-ui,sans-serif; }
-  #bar { padding:8px 12px; background:#222; display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:14px; }
-  input { background:#111; color:#eee; border:1px solid #444; border-radius:6px; padding:6px 8px; font-size:14px; }
-  #ip { width:190px; }
-  #name { width:130px; }
-  button { background:#2d6cdf; color:#fff; border:0; border-radius:6px; padding:7px 12px; cursor:pointer; font-size:14px; }
-  button.gray { background:#444; }
-  button:hover { filter:brightness(1.15); }
-  #dot { width:10px; height:10px; border-radius:50%; background:#c33; display:inline-block; }
-  #dot.on { background:#3c3; }
-  #saved { padding:6px 12px; background:#1a1a1a; display:flex; flex-wrap:wrap; gap:6px; min-height:38px; align-items:center; }
-  .chip { display:inline-flex; align-items:center; background:#333; border-radius:14px; padding:3px 4px 3px 12px; font-size:13px; cursor:pointer; }
-  .chip:hover { background:#444; }
-  .chip.active { background:#1f5e2e; }
-  .chip small { opacity:.6; margin-left:6px; }
-  .chip .x { margin-left:8px; width:20px; height:20px; border-radius:50%; text-align:center; line-height:20px; background:#555; }
-  .chip .x:hover { background:#a33; }
-  #empty { opacity:.5; font-size:13px; }
-  #sync { margin-left:auto; font-size:12px; opacity:.7; }
-  #stage { padding:6px; }
-  canvas { display:none; max-width:100%; margin:0 auto; outline:none; cursor:crosshair; }
-  #hint { text-align:center; opacity:.5; padding:60px 20px; }
-  #drivePanel { display:none; padding:6px 12px 12px; background:#1a1a1a; }
-  #drivePanel.open { display:block; }
-  #driveHead { display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:13px; }
-  #driveHead a { color:#6ea8ff; text-decoration:none; margin-left:auto; }
-  #driveHead a:hover { text-decoration:underline; }
-  #driveFrame { width:100%; height:420px; border:1px solid #444; border-radius:6px; background:#fff; }
-  body:not(.authed) > *:not(#login):not(script) { display:none !important; }
+  :root {
+    --bg:#0E1116; --side:#12161D; --card:#151A22; --line:#232A35; --line2:#2D3644;
+    --text:#E6EAF0; --head:#F2F5F9; --muted:#9AA4B2; --soft:#B6BFCC;
+    --accent:#2F6FEB; --link:#7FB0FF; --ok:#3FB950; --okText:#56D364; --danger:#B93838;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; font-size:14px; }
+  button { font-family:inherit; cursor:pointer; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline:2px solid var(--link); outline-offset:2px; }
+  a { color:var(--link); }
+  svg { flex:0 0 auto; }
+
+  /* ---- gerbang login ---- */
+  body:not(.authed) #app { display:none; }
   body.authed #login { display:none; }
-  #login { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
-  #loginForm { background:#222; padding:24px; border-radius:10px; width:100%; max-width:340px; display:flex; flex-direction:column; gap:10px; }
-  #loginForm h2 { margin:0 0 4px; font-size:18px; }
-  #loginForm input { width:100%; padding:9px 10px; }
-  #loginMsg { font-size:13px; color:#f77; min-height:18px; }
+  #login { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 20px; }
+  #loginWrap { width:100%; max-width:400px; display:flex; flex-direction:column; gap:28px; }
+  .logo { width:36px; height:36px; border-radius:10px; background:var(--accent); display:flex; align-items:center; justify-content:center; }
+  #loginHead { display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
+  #loginHead .logo { width:52px; height:52px; border-radius:14px; }
+  #loginHead h1 { margin:0 0 6px; font-size:24px; font-weight:700; color:var(--head); letter-spacing:-.01em; }
+  #loginHead p { margin:0; color:var(--muted); }
+  #loginForm { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; gap:16px; }
+  #loginMsg { margin:0; min-height:18px; font-size:13px; color:#FF8A8A; text-align:center; }
+  #loginNote { margin:0; font-size:12px; color:var(--muted); text-align:center; }
+
+  /* ---- form umum ---- */
+  .field { display:flex; flex-direction:column; gap:6px; }
+  .field label { font-size:12px; font-weight:500; color:var(--soft); }
+  input { background:var(--bg); color:var(--text); border:1px solid var(--line2); border-radius:8px; height:42px; padding:0 12px; font-family:inherit; font-size:14px; }
+  input.mono { font-family:var(--mono); }
+  .btn { height:42px; padding:0 20px; border:0; border-radius:8px; background:var(--accent); color:#fff; font-size:14px; font-weight:600; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+  .btn.ghost { background:transparent; border:1px solid var(--line2); color:var(--text); font-weight:500; }
+  .btn.danger { background:var(--danger); }
+  .btn.sm { height:34px; padding:0 14px; font-size:13px; }
+  .btn:hover { filter:brightness(1.12); }
+  .icon-btn { width:36px; height:36px; border:0; border-radius:8px; background:transparent; color:var(--muted); display:flex; align-items:center; justify-content:center; }
+  .icon-btn:hover { background:#1B2230; color:var(--text); }
+
+  /* ---- kerangka aplikasi ---- */
+  #app { min-height:100vh; display:flex; flex-wrap:wrap; align-items:stretch; }
+  #side { flex:1 1 240px; max-width:100%; padding:24px 16px; background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; gap:28px; }
+  #brand { display:flex; align-items:center; gap:12px; padding:0 8px; }
+  #brand b { display:block; font-size:15px; font-weight:600; color:var(--text); }
+  #brand small { font-size:12px; color:var(--muted); }
+  #nav { display:flex; flex-direction:column; gap:4px; }
+  .nav { display:flex; align-items:center; gap:12px; width:100%; padding:10px 12px; border:0; border-radius:8px; background:transparent; color:var(--soft); font-size:14px; font-weight:500; text-align:left; }
+  .nav:hover { background:#171D27; }
+  .nav.on { background:#1B2230; color:var(--text); }
+  .nav span { flex:1 1 auto; }
+  .nav em { font-style:normal; font-size:12px; color:var(--muted); }
+  #user { margin-top:auto; display:flex; align-items:center; gap:10px; padding:12px; border:1px solid var(--line); border-radius:10px; }
+  #avatar { width:32px; height:32px; border-radius:50%; background:#243044; color:#B3D0FF; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; text-transform:uppercase; }
+  #userInfo { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; }
+  #userEmail { font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #userInfo small { font-size:12px; color:var(--muted); }
+
+  main { flex:999 1 560px; min-width:0; padding:32px; }
+  section.view { display:flex; flex-direction:column; gap:24px; }
+  .page-head { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; }
+  .page-head > div:first-child { flex:1 1 260px; }
+  .page-head h1 { margin:0 0 4px; font-size:26px; font-weight:700; letter-spacing:-.01em; color:var(--head); }
+  .page-head p { margin:0; color:var(--muted); }
+  .chip-status { display:inline-flex; align-items:center; gap:8px; padding:6px 12px; border:1px solid var(--line); border-radius:999px; font-size:12px; color:var(--soft); }
+  .chip-status.warn { color:#F0B35B; border-color:#5A4720; }
+  #dot { width:8px; height:8px; border-radius:50%; background:#C94A4A; display:inline-block; }
+  #dot.on { background:var(--ok); }
+  #statusLine { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--soft); }
+
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  #connectForm { display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px; }
+  #connectForm .f1 { flex:1 1 180px; } #connectForm .f2 { flex:2 1 260px; }
+  #connectForm .actions { display:flex; flex-wrap:wrap; gap:8px; }
+
+  #toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+  #groups { flex:1 1 320px; display:flex; flex-wrap:wrap; gap:8px; }
+  .gchip { height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--line2); background:transparent; color:var(--soft); font-size:13px; font-weight:500; }
+  .gchip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #searchBox { flex:0 1 260px; min-width:200px; position:relative; }
+  #searchBox svg { position:absolute; left:12px; top:12px; }
+  #searchBox input { width:100%; height:40px; padding-left:36px; background:var(--card); }
+
+  #saved { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+  .card { padding:16px; border-radius:12px; background:var(--card); border:1px solid var(--line); display:flex; flex-direction:column; gap:16px; }
+  .card.active { border-color:#2E7D45; }
+  .card-top { display:flex; align-items:flex-start; gap:10px; }
+  .card-info { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:4px; }
+  .card-name { font-size:15px; font-weight:600; color:var(--head); overflow-wrap:anywhere; }
+  .card-addr { font-family:var(--mono); font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+  .card .icon-btn { width:32px; height:32px; }
+  .card-bottom { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .live { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--okText); }
+  .live i { width:8px; height:8px; border-radius:50%; background:var(--ok); }
+  .card-bottom .spacer { margin-left:auto; display:flex; gap:8px; }
+  #empty { grid-column:1/-1; padding:32px 16px; text-align:center; color:var(--muted); border:1px dashed var(--line2); border-radius:12px; }
+
+  /* ---- sesi kontrol ---- */
+  #sessHead { display:flex; flex-wrap:wrap; align-items:center; gap:12px 16px; }
+  #sessInfo { flex:1 1 220px; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  #sessTitle { display:flex; align-items:center; gap:8px; font-size:16px; font-weight:600; color:var(--head); }
+  #sessAddr { font-family:var(--mono); font-size:12px; color:var(--muted); }
+  #sessActions { display:flex; flex-wrap:wrap; gap:8px; }
+  #stage { border:1px solid var(--line); border-radius:12px; background:#05070A; padding:16px; display:flex; align-items:center; justify-content:center; min-height:420px; }
+  canvas { max-width:100%; height:auto; border-radius:6px; outline:none; cursor:crosshair; display:block; }
+  #tip { margin:0; font-size:13px; color:var(--muted); }
+
+  /* ---- drive ---- */
+  #driveFrame { width:100%; height:calc(100vh - 220px); min-height:420px; border:1px solid var(--line2); border-radius:12px; background:#fff; }
+
+  @media (max-width:720px) {
+    main { padding:20px 16px; }
+    #side { padding:16px; gap:16px; border-right:0; border-bottom:1px solid var(--line); }
+    #user { margin-top:0; }
+  }
 </style>
 </head>
 <body>
+
 <div id="login">
-  <form id="loginForm">
-    <h2>Masuk - Remote PC Lab</h2>
-    <input id="email" type="email" placeholder="Email" autocomplete="username" required>
-    <input id="password" type="password" placeholder="Password" autocomplete="current-password" required>
-    <button type="submit">Masuk</button>
-    <div id="loginMsg"></div>
-  </form>
-</div>
-<div id="bar">
-  <span id="dot"></span><span id="status">Belum terhubung</span>
-  <input id="name" placeholder="Nama (opsional)">
-  <input id="ip" placeholder="IP atau wss://alamat-tunnel" style="width:260px">
-  <button id="btnConnect">Connect</button>
-  <button id="btnSave" class="gray">Simpan</button>
-  <button id="btnDisc" class="gray">Putuskan</button>
-  <button id="btnFull" class="gray">Layar penuh</button>
-  <button id="btnDrive" class="gray">📁 Drive</button>
-  <button id="btnLogout" class="gray">Keluar</button>
-  <span id="sync"></span>
-</div>
-<div id="drivePanel">
-  <div id="driveHead">
-    <b>Google Drive</b>
-    <a href="https://drive.google.com/drive/folders/1tgT3mAV54nv49mB0lhoBaguD-lHX88iv?usp=sharing" target="_blank" rel="noopener">Buka di tab baru ↗</a>
+  <div id="loginWrap">
+    <div id="loginHead">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+      </div>
+      <div>
+        <h1>Remote PC Lab</h1>
+        <p>Masuk untuk mengontrol PC lab dari browser.</p>
+      </div>
+    </div>
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" placeholder="nama@sekolah.sch.id" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+      </div>
+      <button type="submit" class="btn" style="height:46px;font-size:15px">Masuk</button>
+      <p id="loginMsg" role="alert"></p>
+    </form>
+    <p id="loginNote">Akun dibuat oleh admin. Hubungi admin lab jika belum punya akun.</p>
   </div>
-  <iframe id="driveFrame" title="Google Drive" loading="lazy"></iframe>
 </div>
-<div id="saved"></div>
-<div id="stage">
-  <div id="hint">Masukkan IP PC lab di atas lalu klik <b>Connect</b>, atau pilih PC yang sudah tersimpan.<br>
-  Setelah layar tampil, klik layar sekali agar keyboard aktif.</div>
-  <canvas id="c" tabindex="0"></canvas>
+
+<div id="app">
+  <aside id="side">
+    <div id="brand">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+      </div>
+      <div><b>Remote PC Lab</b><small>Pengendali jarak jauh</small></div>
+    </div>
+    <nav id="nav" aria-label="Menu utama">
+      <button type="button" class="nav on" id="navPcs">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        <span>Daftar PC</span><em id="navCount"></em>
+      </button>
+      <button type="button" class="nav" id="navDrive">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <span>Google Drive</span>
+      </button>
+    </nav>
+    <div id="user">
+      <div id="avatar"></div>
+      <div id="userInfo"><span id="userEmail"></span><small>Sudah masuk</small></div>
+      <button type="button" id="btnLogout" class="icon-btn" aria-label="Keluar" title="Keluar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main>
+    <!-- Daftar PC -->
+    <section class="view" id="viewPcs">
+      <header class="page-head">
+        <div>
+          <h1>Daftar PC</h1>
+          <p>Pilih PC untuk mulai mengontrol layarnya dari browser.</p>
+        </div>
+        <div id="statusLine"><span id="dot"></span><span id="status">Belum terhubung</span></div>
+        <div class="chip-status" id="syncChip"><span id="sync"></span></div>
+      </header>
+
+      <section class="panel" aria-label="Hubungkan atau simpan PC">
+        <div id="connectForm">
+          <div class="field f1">
+            <label for="name">Nama (opsional)</label>
+            <input id="name" type="text" placeholder="Contoh: LAB 403 15">
+          </div>
+          <div class="field f2">
+            <label for="ip">IP atau alamat wss://</label>
+            <input id="ip" type="text" class="mono" placeholder="192.168.60.133:8000">
+          </div>
+          <div class="actions">
+            <button type="button" class="btn" id="btnConnect">Connect</button>
+            <button type="button" class="btn ghost" id="btnSave">Simpan</button>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="PC tersimpan" style="display:flex;flex-direction:column;gap:16px">
+        <div id="toolbar">
+          <div id="groups" role="group" aria-label="Filter ruangan"></div>
+          <div id="searchBox">
+            <label for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Cari PC</label>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9AA4B2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input id="q" type="search" placeholder="Cari nama atau IP">
+          </div>
+        </div>
+        <div id="saved"></div>
+      </section>
+    </section>
+
+    <!-- Sesi kontrol -->
+    <section class="view" id="viewSession" hidden>
+      <header id="sessHead">
+        <button type="button" class="btn ghost sm" id="btnBack" style="height:40px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          Daftar PC
+        </button>
+        <div id="sessInfo">
+          <div id="sessTitle"><span class="live"><i></i></span><span id="sessName"></span><span class="live">Terhubung</span></div>
+          <span id="sessAddr"></span>
+        </div>
+        <div id="sessActions">
+          <button type="button" class="btn ghost sm" id="btnFull" style="height:40px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            Layar penuh
+          </button>
+          <button type="button" class="btn danger sm" id="btnDisc" style="height:40px">Putuskan</button>
+        </div>
+      </header>
+      <div id="stage"><canvas id="c" tabindex="0"></canvas></div>
+      <p id="tip">Klik layar sekali agar keyboard aktif. Gerakan mouse, klik, scroll, dan tombol keyboard diteruskan ke PC.</p>
+    </section>
+
+    <!-- Google Drive -->
+    <section class="view" id="viewDrive" hidden>
+      <header class="page-head">
+        <div>
+          <h1>Google Drive</h1>
+          <p>Berkas bersama lab.</p>
+        </div>
+        <a class="btn ghost" id="driveLink" href="https://drive.google.com/drive/folders/1tgT3mAV54nv49mB0lhoBaguD-lHX88iv?usp=sharing" target="_blank" rel="noopener" style="text-decoration:none">Buka di tab baru</a>
+      </header>
+      <iframe id="driveFrame" title="Google Drive"></iframe>
+    </section>
+  </main>
 </div>
 
 <script type="module">
@@ -92,7 +273,23 @@ const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = id => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
 const DEFAULT_PORT = 8000;
+const DRIVE_FOLDER_ID = '1tgT3mAV54nv49mB0lhoBaguD-lHX88iv';
+const GROUPS = ['Semua', 'LAB 403', 'LAB 404', 'EDITING', 'Lainnya'];
 let ws = null, manualClose = false, activeAddr = null;
+let pcsData = [], groupFilter = 'Semua', searchQ = '', currentView = 'pcs';
+
+// ---------- Tampilan (Daftar PC / Sesi / Drive) ----------
+function showView(v) {
+  currentView = v;
+  $('viewPcs').hidden = v !== 'pcs';
+  $('viewSession').hidden = v !== 'session';
+  $('viewDrive').hidden = v !== 'drive';
+  $('navPcs').classList.toggle('on', v !== 'drive');
+  $('navDrive').classList.toggle('on', v === 'drive');
+  if (v === 'drive' && !$('driveFrame').getAttribute('src')) {
+    $('driveFrame').src = 'https://drive.google.com/embeddedfolderview?id=' + DRIVE_FOLDER_ID + '#list';
+  }
+}
 
 // ---------- Penyimpanan daftar PC (Supabase + cache localStorage) ----------
 function readCache() {
@@ -101,17 +298,20 @@ function readCache() {
 function writeCache(list) {
   try { localStorage.setItem('pcs', JSON.stringify(list)); } catch (e) {}
 }
-function setSync(text) { $('sync').textContent = text; }
+function setSync(text, warn) {
+  $('sync').textContent = text;
+  $('syncChip').classList.toggle('warn', !!warn);
+}
 
 async function loadPCs() {
   try {
     const { data, error } = await sb.from('pcs').select('name,addr').order('created_at');
     if (error) throw error;
     writeCache(data);
-    setSync('☁ Supabase');
+    setSync('☁ Tersinkron ke Supabase');
     return data;
   } catch (e) {
-    setSync('⚠ Offline (cache lokal)');
+    setSync('⚠ Offline (cache lokal)', true);
     return readCache();
   }
 }
@@ -121,12 +321,12 @@ async function savePC(name, addr) {
   if (found) found.name = name; else list.push({ name, addr });
   writeCache(list);
   const { error } = await sb.from('pcs').upsert({ name, addr }, { onConflict: 'addr' });
-  if (error) setSync('⚠ Gagal simpan ke Supabase');
+  if (error) setSync('⚠ Gagal simpan ke Supabase', true);
 }
 async function deletePC(addr) {
   writeCache(readCache().filter(p => p.addr !== addr));
   const { error } = await sb.from('pcs').delete().eq('addr', addr);
-  if (error) setSync('⚠ Gagal hapus di Supabase');
+  if (error) setSync('⚠ Gagal hapus di Supabase', true);
 }
 
 // Menerima: "192.168.1.25", "ws://192.168.1.25:8000", "wss://pc1.domain.com", "https://xxxx.trycloudflare.com"
@@ -148,26 +348,91 @@ function normalize(raw) {
   if (scheme === 'ws' && !/:\d+$/.test(v)) v += ':' + DEFAULT_PORT;
   return { url: scheme + '://' + v, addr: scheme === 'ws' ? v : 'wss://' + v };
 }
-async function renderSaved() {
+
+function groupOf(name) {
+  if (name.indexOf('LAB 403') === 0) return 'LAB 403';
+  if (name.indexOf('LAB 404') === 0) return 'LAB 404';
+  if (name.indexOf('EDITING') === 0) return 'EDITING';
+  return 'Lainnya';
+}
+
+function btn(cls, text, onclick) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = onclick;
+  return b;
+}
+
+function draw() {
+  $('navCount').textContent = pcsData.length;
+
+  // filter ruangan
+  const gbox = $('groups');
+  gbox.innerHTML = '';
+  GROUPS.forEach(g => {
+    const n = g === 'Semua' ? pcsData.length : pcsData.filter(p => groupOf(p.name) === g).length;
+    const b = btn('gchip' + (groupFilter === g ? ' on' : ''), g + ' · ' + n, () => { groupFilter = g; draw(); });
+    gbox.appendChild(b);
+  });
+
+  // kartu PC
   const box = $('saved');
-  const list = await loadPCs();
   box.innerHTML = '';
-  if (!list.length) { box.innerHTML = '<span id="empty">Belum ada PC tersimpan. Isi IP lalu klik "Simpan".</span>'; return; }
+  const q = searchQ.toLowerCase();
+  const list = pcsData.filter(p =>
+    (groupFilter === 'Semua' || groupOf(p.name) === groupFilter) &&
+    (!q || p.name.toLowerCase().includes(q) || p.addr.toLowerCase().includes(q)));
+  if (!list.length) {
+    const e = document.createElement('div');
+    e.id = 'empty';
+    e.textContent = pcsData.length ? 'Tidak ada PC yang cocok.' : 'Belum ada PC tersimpan. Isi IP lalu klik "Simpan".';
+    box.appendChild(e);
+    return;
+  }
   list.forEach(pc => {
-    const el = document.createElement('div');
     const n = normalize(pc.addr);
-    el.className = 'chip' + (n && n.url === activeAddr ? ' active' : '');
-    el.innerHTML = '<span></span><small></small><span class="x" title="Hapus">×</span>';
-    el.children[0].textContent = pc.name;
-    el.children[1].textContent = pc.addr;
-    el.onclick = () => { $('name').value = pc.name; $('ip').value = pc.addr; connect(pc.addr); };
-    el.querySelector('.x').onclick = async ev => {
-      ev.stopPropagation();
+    const isActive = !!(n && n.url === activeAddr);
+    const el = document.createElement('article');
+    el.className = 'card' + (isActive ? ' active' : '');
+
+    const top = document.createElement('div'); top.className = 'card-top';
+    const info = document.createElement('div'); info.className = 'card-info';
+    const nm = document.createElement('span'); nm.className = 'card-name'; nm.textContent = pc.name;
+    const ad = document.createElement('span'); ad.className = 'card-addr'; ad.textContent = pc.addr;
+    info.append(nm, ad);
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'icon-btn';
+    del.setAttribute('aria-label', 'Hapus ' + pc.name); del.title = 'Hapus';
+    del.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+    del.onclick = async () => {
+      if (!confirm('Hapus "' + pc.name + '" dari daftar?')) return;
       await deletePC(pc.addr);
       renderSaved();
     };
+    top.append(info, del);
+
+    const bottom = document.createElement('div'); bottom.className = 'card-bottom';
+    if (isActive) {
+      const live = document.createElement('span'); live.className = 'live';
+      live.innerHTML = '<i></i>Terhubung';
+      const sp = document.createElement('div'); sp.className = 'spacer';
+      sp.append(
+        btn('btn ghost sm', 'Putuskan', () => disconnect(false)),
+        btn('btn sm', 'Buka layar', () => showView('session'))
+      );
+      bottom.append(live, sp);
+    } else {
+      const sp = document.createElement('div'); sp.className = 'spacer';
+      sp.append(btn('btn sm', 'Hubungkan', () => { $('name').value = pc.name; $('ip').value = pc.addr; connect(pc.addr, pc.name); }));
+      bottom.append(sp);
+    }
+    el.append(top, bottom);
     box.appendChild(el);
   });
+}
+
+async function renderSaved() {
+  pcsData = await loadPCs();
+  draw();
 }
 
 // ---------- Koneksi ----------
@@ -175,9 +440,9 @@ function setStatus(on, text) {
   $('dot').className = on ? 'on' : '';
   $('status').textContent = text;
 }
-function connect(addrRaw) {
+function connect(addrRaw, nameHint) {
   const n = normalize(addrRaw);
-  if (!n) { setStatus(false, 'Isi IP atau alamat wss:// dulu'); return; }
+  if (!n) { setStatus(false, 'Isi IP atau alamat wss:// dulu'); showView('pcs'); return; }
   const addr = n.url;
   if (location.protocol === 'https:' && addr.startsWith('ws://')) {
     // Halaman HTTPS tidak boleh membuka ws://, jadi pindah langsung ke halaman kontrol di PC itu (HTTP)
@@ -192,14 +457,23 @@ function connect(addrRaw) {
   try { localStorage.setItem('lastIp', n.addr); } catch (e) {}
   let sock;
   try { sock = new WebSocket(addr + '/ws'); }
-  catch (e) { setStatus(false, 'Alamat tidak valid'); return; }
+  catch (e) { setStatus(false, 'Alamat tidak valid'); activeAddr = null; return; }
   ws = sock;
   sock.binaryType = 'blob';
-  sock.onopen = () => { setStatus(true, 'Terhubung ke ' + addr); canvas.style.display = 'block'; $('hint').style.display = 'none'; renderSaved(); };
+  sock.onopen = () => {
+    setStatus(true, 'Terhubung ke ' + addr);
+    const saved = pcsData.find(p => { const m = normalize(p.addr); return m && m.url === addr; });
+    $('sessName').textContent = nameHint || (saved && saved.name) || $('name').value.trim() || n.addr;
+    $('sessAddr').textContent = n.addr;
+    showView('session');
+    draw();
+  };
   sock.onclose = () => {
     if (ws !== sock) return;
     setStatus(false, manualClose ? 'Terputus' : 'Gagal/terputus dari ' + addr + ' (cek IP, jaringan, dan agent)');
-    activeAddr = null; renderSaved();
+    activeAddr = null;
+    showView('pcs');
+    draw();
   };
   sock.onerror = () => {};
   sock.onmessage = async e => {
@@ -213,23 +487,14 @@ function connect(addrRaw) {
 function disconnect(silent) {
   manualClose = true;
   if (ws) { const s = ws; ws = null; try { s.close(); } catch (e) {} }
-  canvas.style.display = 'none';
-  $('hint').style.display = 'block';
   activeAddr = null;
-  if (!silent) { setStatus(false, 'Terputus'); renderSaved(); }
+  if (!silent) { setStatus(false, 'Terputus'); showView('pcs'); draw(); }
 }
 
-// ---------- Google Drive ----------
-const DRIVE_FOLDER_ID = '1tgT3mAV54nv49mB0lhoBaguD-lHX88iv';
-$('btnDrive').onclick = () => {
-  const panel = $('drivePanel'), frame = $('driveFrame');
-  const open = panel.classList.toggle('open');
-  if (open && !frame.src) frame.src = 'https://drive.google.com/embeddedfolderview?id=' + DRIVE_FOLDER_ID + '#list';
-};
-
-$('btnConnect').onclick = () => connect($('ip').value);
-$('ip').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('ip').value); });
+$('btnConnect').onclick = () => connect($('ip').value, $('name').value.trim());
+$('ip').addEventListener('keydown', e => { if (e.key === 'Enter') connect($('ip').value, $('name').value.trim()); });
 $('btnDisc').onclick = () => disconnect(false);
+$('btnBack').onclick = () => showView('pcs');
 $('btnFull').onclick = () => { (canvas.requestFullscreen || canvas.webkitRequestFullscreen).call(canvas); canvas.focus(); };
 $('btnSave').onclick = async () => {
   const n = normalize($('ip').value);
@@ -238,6 +503,9 @@ $('btnSave').onclick = async () => {
   await savePC(name, n.addr);
   renderSaved();
 };
+$('q').addEventListener('input', e => { searchQ = e.target.value; draw(); });
+$('navPcs').onclick = () => showView(ws && currentView === 'drive' ? 'session' : 'pcs');
+$('navDrive').onclick = () => showView('drive');
 
 // ---------- Mouse ----------
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -295,13 +563,16 @@ function startApp() {
 
 function onSession(session) {
   if (session) {
+    const email = (session.user && session.user.email) || '';
+    $('userEmail').textContent = email;
+    $('avatar').textContent = email.charAt(0);
     document.body.classList.add('authed');
     if (!started) { started = true; startApp(); }
   } else {
     started = false;
     disconnect(true);
     $('driveFrame').removeAttribute('src');
-    $('drivePanel').classList.remove('open');
+    showView('pcs');
     document.body.classList.remove('authed');
   }
 }
